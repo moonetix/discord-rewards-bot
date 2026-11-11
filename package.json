@@ -1,0 +1,17 @@
+{
+  "name": "discord-rewards-bot",
+  "version": "1.0.0",
+  "description": "Discord HTTP interactions app with /earn and /balance, a private earn page with the Moonetix offerwall, and postback crediting.",
+  "private": true,
+  "license": "MIT",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node --env-file=.env --disable-warning=ExperimentalWarning src/server.js",
+    "register-commands": "node --env-file=.env scripts/register-commands.js",
+    "link-account": "node --env-file=.env --disable-warning=ExperimentalWarning scripts/link-account.js",
+    "test": "node --disable-warning=ExperimentalWarning --test"
+  }
+}
