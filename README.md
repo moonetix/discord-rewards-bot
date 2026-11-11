@@ -12,7 +12,7 @@ A Discord app built on the HTTP Interactions endpoint, with `/earn` and `/balanc
 
 > **Get your App ID and keys: sign up free at https://moonetix.com/register**
 
-## Why this repo
+## Design choices
 
 1. **Discord IDs stay with you.** The offerwall only sees your own site account ID. The bot never builds a link from a Discord ID and never posts a signed link in Discord.
 2. **No gateway, no intents.** Discord sends commands to your HTTPS endpoint, signed with Ed25519. The app cannot read messages, so it cannot reward chat, joins or invites even by mistake.
