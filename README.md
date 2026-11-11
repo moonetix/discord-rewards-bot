@@ -2,6 +2,7 @@
 
 **Give your Discord members a private way to earn your server coins by completing offers, within Discord's rules.**
 
+[![CI](https://github.com/moonetix/discord-rewards-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/moonetix/discord-rewards-bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-docs.moonetix.com-004ABB)](https://docs.moonetix.com/postbacks)
 [![Get keys](https://img.shields.io/badge/get%20keys-moonetix.com-004ABB)](https://moonetix.com/register)
