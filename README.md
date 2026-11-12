@@ -5,13 +5,13 @@
 [![CI](https://github.com/moonetix/discord-rewards-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/moonetix/discord-rewards-bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-docs.moonetix.com-004ABB)](https://docs.moonetix.com/postbacks)
-[![Get keys](https://img.shields.io/badge/get%20keys-moonetix.com-004ABB)](https://moonetix.com/register)
+[![Get keys](https://img.shields.io/badge/get%20keys-moonetix.com-004ABB)](https://moonetix.com/register?from=github-discord-rewards-bot)
 [![Node 22](https://img.shields.io/badge/node-22-339933)](https://moonetix.com/academy/integrations/discord-bot-offerwall)
 [![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)](https://moonetix.com/industries/discord)
 
-A Discord app built on the HTTP Interactions endpoint, with `/earn` and `/balance`, a private earn page on your site with the [Moonetix](https://moonetix.com) offerwall, and a postback handler that credits coins. Moonetix is a pay-per-result affiliate network: your members earn your own currency by completing offers, and you earn per completed offer.
+A Discord app built on the HTTP Interactions endpoint, with `/earn` and `/balance`, a private earn page on your site with the [Moonetix](https://moonetix.com) offerwall, and a postback handler that credits coins. Moonetix is an affiliate network: your members earn your own currency by completing offers, and you earn per completed offer.
 
-> **Get your App ID and keys: sign up free at https://moonetix.com/register**
+> **Get your App ID and keys: sign up free at https://moonetix.com/register?from=github-discord-rewards-bot**
 
 ## Design choices
 
@@ -31,7 +31,8 @@ sequenceDiagram
     D->>S: Signed interaction (Ed25519)
     S->>S: Verify signature, find the linked site account
     S-->>D: Ephemeral reply with a one-time earn page button
-    U->>S: Opens the earn page
+    U->>S: GET /earn?code=... (one-time code)
+    S-->>U: 303 to /earn with a session cookie
     S->>S: Sign the offerwall link for the site account ID
     S-->>U: Earn page with the offerwall
     U->>M: Completes an offer
@@ -70,18 +71,20 @@ https://YOUR_HOST/moonetix/postback?user={user_id}&tx={transaction_id}&event={ev
 npm run link-account -- --discord YOUR_DISCORD_USER_ID --name Ana --age-16-plus
 ```
 
-| Variable | What it is |
-| --- | --- |
-| `DISCORD_PUBLIC_KEY` | Public key from General Information. Used to verify every interaction. |
-| `DISCORD_APPLICATION_ID`, `DISCORD_BOT_TOKEN` | Only for `scripts/register-commands.js`. |
-| `DISCORD_GUILD_ID` | Optional. Registers the commands in one server, where they show up right away. |
-| `SITE_URL` | Public https address of your site. The earn page is `SITE_URL/earn`. |
-| `LINK_ACCOUNT_URL` | Your page where members link Discord. Default `SITE_URL/account`. |
-| `MOONETIX_APP_ID` | App ID from the Integration section. |
-| `MOONETIX_LINK_SALT` | Link hash salt from the Integration section. |
-| `MOONETIX_POSTBACK_KEY` | Postback secret key from the Postback page. |
-| `EARN_COOLDOWN_SECONDS` | Time between two `/earn` uses per member. Default 30. |
-| `DATABASE_PATH`, `PORT`, `CURRENCY_NAME` | Optional. |
+| Variable | Required | Default | What it is |
+| --- | --- | --- | --- |
+| `DISCORD_PUBLIC_KEY` | yes | none | 64 hex characters from General Information. Verifies every interaction. |
+| `SITE_URL` | yes | none | Public address of your site. The earn page is `SITE_URL/earn`. Cookies are `Secure` when it starts with `https://`. |
+| `MOONETIX_APP_ID` | yes | none | App ID from the Integration section. |
+| `MOONETIX_LINK_SALT` | yes | none | Link hash salt from the Integration section. |
+| `MOONETIX_POSTBACK_KEY` | yes | none | Postback secret key from the Postback page. |
+| `DISCORD_APPLICATION_ID`, `DISCORD_BOT_TOKEN` | for `register-commands` | none | Only read by `scripts/register-commands.js`. |
+| `DISCORD_GUILD_ID` | no | empty | Registers the commands in one server, where they show up right away. Empty means global. |
+| `LINK_ACCOUNT_URL` | no | `SITE_URL/account` | Your page where members link Discord. |
+| `EARN_COOLDOWN_SECONDS` | no | `30` | Time between two `/earn` uses per member. |
+| `PORT` | no | `3000` | HTTP port. |
+| `DATABASE_PATH` | no | `./data.sqlite` | SQLite file. |
+| `CURRENCY_NAME` | no | `Coins` | Currency name in replies and on the earn page. |
 
 ## How it works
 
@@ -137,16 +140,36 @@ The tests need no Discord app and no network. They:
 - follow the button: the code signs in once, the earn page holds the signed link for the site account, and a reused code, a missing cookie and a forged cookie all fail;
 - replay real Moonetix postbacks (`test/fixtures/moonetix-vectors.json`): credit, retry, decimals, reversal, repeated reversal, uncredited `test_` reversal, unknown users, and tampered or wrongly signed postbacks, with `/balance` checked after each step.
 
+With `npm start` running, [postback-tester](https://github.com/moonetix/postback-tester) checks the postback route from the outside. It signs requests exactly like Moonetix and covers retries, reversals, forged and unsigned postbacks and five parallel copies of one credit. Use a site account ID from `npm run link-account` so the credits land on a real account:
+
+```bash
+export MOONETIX_POSTBACK_KEY=your-postback-secret-key   # same value as in .env
+npx github:moonetix/postback-tester --preset moonetix \
+  'http://localhost:3000/moonetix/postback?user={user_id}&tx={transaction_id}&event={event_id}&status={status}&reward={reward}&payout={payout}&offer={offer_name}&hash={hash}' --user 1
+```
+
 ## Test it with Moonetix
 
 1. Link your own Discord account to a test site account and run `/earn` in your server. Only you see the reply.
 2. Open the earn page. In the dashboard, open Offerwalls, your offerwall, Integration, and use Check a link to compare Test a link for your site account ID with the link on the page.
-3. Click Send a test postback for that account ID with status 1. `/balance` goes up once. Resending it from Reports, Postbacks changes nothing.
-4. A status 2 test gets a new `test_` transaction ID that was never credited, so the server answers 200 and changes nothing. You can also resend from the Postback page.
+3. Click Send a test postback for that account ID with status 1. This server credits test postbacks for real account IDs, so `/balance` goes up once. A retry of the same transaction changes nothing.
+4. A status 2 test gets a new `test_` transaction ID that was never credited, so the server answers 200 and changes nothing. The Postback page has the same test sender.
 5. Open the offerwall from a normal home or mobile connection. VPNs, proxies, Tor and data center networks see a block page.
 6. Before launch, remove the test rewards from your test account.
 
 The offerwall iframe only loads on https pages of the website you registered for your Moonetix app. The earn page also has a plain link that opens the offerwall in a new tab.
+
+## Common problems
+
+| What you see | Why, and the fix |
+| --- | --- |
+| `node: .env: not found` | `npm start` and the scripts read `.env` from the repo root. Run `cp .env.example .env`. |
+| `Missing environment variables: ...` or `DISCORD_PUBLIC_KEY must be 64 hex characters` | A required value is empty or is not the public key (the bot token and client secret are not). |
+| Developer Portal: "interactions endpoint url could not be verified" | Discord could not reach `https://YOUR_HOST/interactions`, or got 401 `invalid request signature` for its valid PING because the public key belongs to another app. |
+| `Set DISCORD_APPLICATION_ID and DISCORD_BOT_TOKEN first.` or `Discord answered 401` | `register-commands` needs the application ID and a current bot token. |
+| `/earn` says "Link Discord to your account on our site first" | The member has no row in `discord_links`. Locally, run `npm run link-account`. |
+| Earn page shows "Link expired" | The button code works once and for 10 minutes. Run `/earn` again. |
+| Postback answers `403 invalid hash` | Wrong `MOONETIX_POSTBACK_KEY`, or a proxy changed a signed value. |
 
 ## Learn more
 
@@ -158,9 +181,17 @@ The offerwall iframe only loads on https pages of the website you registered for
 
 ## Get started
 
-**Get your App ID and keys: sign up free at https://moonetix.com/register**
+**Get your App ID and keys: sign up free at https://moonetix.com/register?from=github-discord-rewards-bot**
 
 Every publisher application is reviewed by hand. Once you are approved, add your site as an app, set your coin name and rate, and paste the keys into `.env`.
+
+## More Moonetix examples
+
+- **Start here:** [awesome-offerwalls](https://github.com/moonetix/awesome-offerwalls), [offerwall-postback-handlers](https://github.com/moonetix/offerwall-postback-handlers)
+- **Web and backends:** [offerwall-nextjs-starter](https://github.com/moonetix/offerwall-nextjs-starter), [offerwall-react-vite](https://github.com/moonetix/offerwall-react-vite), [offerwall-vue-nuxt](https://github.com/moonetix/offerwall-vue-nuxt), [offerwall-express](https://github.com/moonetix/offerwall-express), [offerwall-laravel](https://github.com/moonetix/offerwall-laravel), [offerwall-django](https://github.com/moonetix/offerwall-django), [offerwall-firebase-functions](https://github.com/moonetix/offerwall-firebase-functions), [offerwall-supabase](https://github.com/moonetix/offerwall-supabase), [rewards-site-starter](https://github.com/moonetix/rewards-site-starter), [moonetix-offerwall-wordpress](https://github.com/moonetix/moonetix-offerwall-wordpress)
+- **Apps and games:** [offerwall-flutter-example](https://github.com/moonetix/offerwall-flutter-example), [offerwall-react-native-example](https://github.com/moonetix/offerwall-react-native-example), [offerwall-unity-example](https://github.com/moonetix/offerwall-unity-example), [offerwall-godot](https://github.com/moonetix/offerwall-godot)
+- **Communities and desktop:** [telegram-mini-app-offerwall](https://github.com/moonetix/telegram-mini-app-offerwall), [offerwall-chrome-extension](https://github.com/moonetix/offerwall-chrome-extension)
+- **Tools and data:** [postback-tester](https://github.com/moonetix/postback-tester), [signup-guard](https://github.com/moonetix/signup-guard), [datacenter-ip-ranges](https://github.com/moonetix/datacenter-ip-ranges), [reward-economy-kit](https://github.com/moonetix/reward-economy-kit), [referral-engine](https://github.com/moonetix/referral-engine), [gamification-kit](https://github.com/moonetix/gamification-kit), [offerwall-fraud-playbook](https://github.com/moonetix/offerwall-fraud-playbook), [affiliate-postback-macros](https://github.com/moonetix/affiliate-postback-macros), [country-tiers](https://github.com/moonetix/country-tiers)
 
 ## License
 
